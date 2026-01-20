@@ -5,7 +5,8 @@
   "description": "Control your browser with hand gestures.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "system.display"
   ],
   "background": {
     "service_worker": "background.js"
@@ -24,9 +25,14 @@
         "vision_bundle.js",
         "vision_wasm_internal.wasm",
         "vision_wasm_internal.js",
+        "vision_wasm_nosimd_internal.js",
+        "vision_wasm_nosimd_internal.wasm",
         "hand_landmarker.task"
       ],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
 }

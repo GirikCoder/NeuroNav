@@ -9,6 +9,7 @@ videoElement.style.width = "160px";
 videoElement.style.height = "120px";
 videoElement.style.zIndex = "9999";
 videoElement.style.transform = "scaleX(-1)";
+videoElement.id = "neuronav-video"; // <--- ADD THIS LINE
 videoElement.style.borderRadius = "10px";
 videoElement.style.objectFit = "cover";
 videoElement.autoplay = true;
@@ -40,8 +41,15 @@ function injectScript(file_path) {
 // 3. Listen for Success Message from the Bridge
 window.addEventListener("message", (event) => {
     // Only listen to our own messages
+    if (event.source !== window) return;
     if (event.data.type === "NEURONAV_READY") {
         console.log("NeuroNav Content Script: AI is Ready and Confirming!");
+    }
+    if (event.data.type === "NEURONAV_ACTION") {
+        console.log("NeuroNav Relay: Sending command to Background ->", event.data.action);
+        
+        // Send to background.js
+        chrome.runtime.sendMessage({ command: event.data.action });
     }
 });
 
