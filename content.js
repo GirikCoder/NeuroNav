@@ -1,30 +1,49 @@
-// 1. Create the HTML video element in memory
+// content.js - Runs in Isolated World
+
+// 1. Setup Video (Same as before)
 const videoElement = document.createElement('video');
-
-// 2. Configure the video settings
-videoElement.style.position = "fixed";      // Stuck to the screen (doesn't scroll)
-videoElement.style.top = "10px";         // 10px from the bottom
-videoElement.style.right = "10px";          // 10px from the right
-videoElement.style.width = "160px";         // Small size
+videoElement.style.position = "fixed";
+videoElement.style.top = "10px";
+videoElement.style.right = "10px";
+videoElement.style.width = "160px";
 videoElement.style.height = "120px";
-videoElement.style.zIndex = "9999";         // Sit on top of everything else
-videoElement.style.transform = "scaleX(-1)";// Mirror the feed (natural feel)
-videoElement.style.borderRadius = "10px";   // Rounded corners (looks nice)
-videoElement.style.objectFit = "cover";     // Fill the box without stretching
-videoElement.autoplay = true;               // Start playing immediately
-videoElement.muted = true;                  // No audio (prevents feedback loops)
-
-// 3. Inject the video into the actual webpage
+videoElement.style.zIndex = "9999";
+videoElement.style.transform = "scaleX(-1)";
+videoElement.style.borderRadius = "10px";
+videoElement.style.objectFit = "cover";
+videoElement.autoplay = true;
+videoElement.muted = true;
 document.body.appendChild(videoElement);
 
-// 4. Request access to the user's webcam
 navigator.mediaDevices.getUserMedia({ video: true })
   .then((stream) => {
-    // SUCCESS: If the user clicks "Allow"
+    videoElement.srcObject = stream;
     console.log("NeuroNav: Camera access granted.");
-    videoElement.srcObject = stream; // Connect the camera stream to the video element
   })
-  .catch((error) => {
-    // ERROR: If the user clicks "Block" or has no camera
-    console.error("NeuroNav Error:", error);
-  });
+  .catch((e) => console.error("NeuroNav Camera Error:", e));
+
+
+// 2. INJECT the Bridge Script
+function injectScript(file_path) {
+    const script = document.createElement('script');
+    script.setAttribute('type', 'module');
+    script.setAttribute('src', chrome.runtime.getURL(file_path));
+    // When the script loads, we send it the configuration
+    script.onload = () => {
+        // Send the Extension's base URL to the injected script
+        const extensionBaseUrl = chrome.runtime.getURL("");
+        window.postMessage({ type: "INIT_NEURONAV", baseUrl: extensionBaseUrl }, "*");
+    };
+    (document.head || document.documentElement).appendChild(script);
+}
+
+// 3. Listen for Success Message from the Bridge
+window.addEventListener("message", (event) => {
+    // Only listen to our own messages
+    if (event.data.type === "NEURONAV_READY") {
+        console.log("NeuroNav Content Script: AI is Ready and Confirming!");
+    }
+});
+
+// Start the Injection
+injectScript("ai_bridge.js");

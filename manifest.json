@@ -13,7 +13,20 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "type": "module"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ai_bridge.js",
+        "vision_bundle.js",
+        "vision_wasm_internal.wasm",
+        "vision_wasm_internal.js",
+        "hand_landmarker.task"
+      ],
+      "matches": ["<all_urls>"]
     }
   ]
 }
