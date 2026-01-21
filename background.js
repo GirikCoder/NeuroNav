@@ -7,7 +7,7 @@ const COOLDOWN_MS = 1500;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const now = Date.now();
     
-    // Check Global Cooldown (Except for Close Tab, which should apply instantly)
+    // Check Global Cooldown (Except for critical actions like Close/Reload)
     if (now - lastActionTime < COOLDOWN_MS) return;
 
     // 1. CLOSE TAB (Scissor)
@@ -19,7 +19,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 2. MINIMIZE
+    // 2. OPEN NEW TAB (Gun Gesture)
+    if (request.command === "NEW_TAB") {
+        console.log("Action: New Tab");
+        lastActionTime = now;
+        chrome.tabs.create({});
+    }
+
+    // 3. RELOAD TAB (Index Circle)
+    if (request.command === "RELOAD") {
+        console.log("Action: Reload");
+        lastActionTime = now; // Longer cooldown to prevent double reload
+        chrome.tabs.reload();
+    }
+
+    // 4. MINIMIZE
     if (request.command === "MINIMIZE") {
         console.log("Action: Minimize");
         lastActionTime = now;
@@ -28,7 +42,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 3. TAB SWITCHING
+    // 5. TAB SWITCHING
     if (request.command === "TAB_LEFT") {
         console.log("Action: Tab Left");
         lastActionTime = now;
