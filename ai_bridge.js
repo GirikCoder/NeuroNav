@@ -1,4 +1,4 @@
-// ai_bridge.js - MASTER: Scissor + Scroll + Minimize + Gun + Circle
+// ai_bridge.js - MASTER V5: All Gestures Fixed & Integrated
 
 // --- TRUSTED TYPES BYPASS ---
 (function() {
@@ -19,7 +19,7 @@
 })();
 
 // --- AI SETUP ---
-console.log("NeuroNav: Master V2 Loading...");
+console.log("NeuroNav: Master V5 (Final) Loading...");
 async function initializeAI(baseUrl) {
     try {
         const bundleUrl = `${baseUrl}vision_bundle.js`;
@@ -62,20 +62,18 @@ function startDetectionLoop(landmarker, video) {
 // Shared State
 let holdStartTime = 0;
 let currentGestureName = null;
-let previousY = null; // For Minimize
+let previousY = null; 
 let isMinimizeReady = false;
 let scissorState = "CLOSED"; 
-
-// Circle Detection State (Reload)
 let circlePoints = []; 
-const CIRCLE_HISTORY_SIZE = 30; // Track last 30 frames
+const CIRCLE_HISTORY_SIZE = 30; 
 
 // CONFIG
 const DWELL_TIME = 500; // 0.5s hold time
 const SCROLL_SPEED = 4; 
 const MINIMIZE_SWIPE_SPEED = 0.015;
 
-function    processGestures(landmarks) {
+function processGestures(landmarks) {
     const wrist = landmarks[0];
     const thumbTip = landmarks[4];
     const thumbMCP = landmarks[2]; 
@@ -96,7 +94,7 @@ function    processGestures(landmarks) {
         Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15
     );
 
-    // Scissor Pose (Index/Middle Extended, Ring/Pinky Curled)
+    // Scissor Pose
     const isScissorPose = (
         !fingersClosed &&
         Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > Math.hypot(indexPip.x - wrist.x, indexPip.y - wrist.y) && 
@@ -105,40 +103,46 @@ function    processGestures(landmarks) {
         Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.2
     );
 
-    // Gun Pose (Index & Thumb Extended, others Curled)
+    // Gun Pose
     const isGunPose = (
         !fingersClosed && !isScissorPose &&
-        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.15 && // Index Out
-        Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y) > 0.15 && // Thumb Out
-        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 && // Middle Curled
-        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && // Ring Curled
-        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15    // Pinky Curled
+        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.15 && 
+        Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y) > 0.15 && 
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 && 
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && 
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15    
     );
 
-    // ... (after isGunPose block) ...
-
-    // Korean Heart Pose (Index & Thumb touching, others curled)
+    // Korean Heart Pose (Relaxed)
     const thumbIndexDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
     const isKoreanHeartPose = (
         !fingersClosed && !isScissorPose && !isGunPose &&
-        thumbIndexDist < 0.05 && // Tips Touching/Crossed
-        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.2 && // Middle Curled (Relaxed)
+        thumbIndexDist < 0.05 && 
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.2 && 
         Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.2 && 
         Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.2    
     );
 
-    // Index Point Pose (Only Index Extended, others Curled) -> For Reload Circle
-    const isIndexPointPose = (
-        !fingersClosed && !isScissorPose && !isGunPose &&
-        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.15 && // Index Out
-        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 && // Middle Curled
-        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15        // Ring Curled
-        // Note: Thumb position doesn't matter much for "Point", but strictly curled is better
+    // Ok Pose (Index & Thumb touching, others Open)
+    const isOkPose = (
+        !fingersClosed && !isScissorPose && !isGunPose && !isKoreanHeartPose &&
+        thumbIndexDist < 0.05 && 
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) > 0.2 && 
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) > 0.2 && 
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) > 0.2    
     );
 
-    // Open Hand (All extended)
+    // Index Point Pose (Reload)
+    const isIndexPointPose = (
+        !fingersClosed && !isScissorPose && !isGunPose && !isKoreanHeartPose && !isOkPose &&
+        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.15 && 
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 && 
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15
+    );
+
+    // Open Hand (Minimize)
     const fingersOpen = (
-        !isScissorPose && !isGunPose && !isIndexPointPose &&
+        !isScissorPose && !isGunPose && !isIndexPointPose && !isKoreanHeartPose && !isOkPose &&
         Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.2 &&
         Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) > 0.2 &&
         Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) > 0.2 &&
@@ -146,9 +150,7 @@ function    processGestures(landmarks) {
     );
 
 
-    // -----------------------------------------------------------
-    // PRIORITY 1: SCISSOR (Close Tab)
-    // -----------------------------------------------------------
+    // --- PRIORITY 1: SCISSOR ---
     if (isScissorPose) {
         resetOthers();
         const scissorDist = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
@@ -173,89 +175,48 @@ function    processGestures(landmarks) {
     }
 
 
-    // -----------------------------------------------------------
-    // PRIORITY 2: GUN (New Tab)
-    // -----------------------------------------------------------
+    // --- PRIORITY 2: GUN (New Tab) ---
     if (isGunPose) {
         resetOthers();
-        
-        // Logic: Hold for DWELL_TIME
-        if (currentGestureName !== "NEW_TAB") {
-            currentGestureName = "NEW_TAB";
-            holdStartTime = Date.now();
-            sendFeedback(0.1);
-        } else {
-            const elapsed = Date.now() - holdStartTime;
-            const progress = Math.min(elapsed / DWELL_TIME, 1);
-            sendFeedback(progress);
-            
-            if (elapsed >= DWELL_TIME) {
-                console.log("🔫 GUN FIRED -> NEW TAB");
-                triggerAction("NEW_TAB");
-                currentGestureName = null;
-                holdStartTime = 0;
-                sendFeedback(0);
-            }
-        }
-        return; // Priority over others
-    }
-
-    // -----------------------------------------------------------
-    // PRIORITY 3: KOREAN HEART (Restore Tab)
-    // -----------------------------------------------------------
-    if (isKoreanHeartPose) {
-        resetOthers();
-        
-        // Logic: Hold for DWELL_TIME
-        if (currentGestureName !== "RESTORE") {
-            currentGestureName = "RESTORE";
-            holdStartTime = Date.now();
-            sendFeedback(0.1);
-        } else {
-            const elapsed = Date.now() - holdStartTime;
-            const progress = Math.min(elapsed / DWELL_TIME, 1);
-            sendFeedback(progress);
-            
-            if (elapsed >= DWELL_TIME) {
-                console.log("🫶 HEART -> RESTORE TAB");
-                triggerAction("RESTORE");
-                currentGestureName = null;
-                holdStartTime = 0;
-                sendFeedback(0);
-            }
-        }
+        handleHoldGesture("NEW_TAB", "NEW_TAB");
         return;
     }
-    // -----------------------------------------------------------
-    // PRIORITY 4: INDEX CIRCLE (Reload)
-    // -----------------------------------------------------------
+
+    // --- PRIORITY 3: KOREAN HEART (Restore) ---
+    if (isKoreanHeartPose) {
+        resetOthers();
+        handleHoldGesture("RESTORE", "RESTORE");
+        return;
+    }
+
+    // --- PRIORITY 4: OK GESTURE (Bookmark) ---
+    if (isOkPose) {
+        resetOthers();
+        handleHoldGesture("BOOKMARK", "BOOKMARK");
+        return;
+    }
+
+    // --- PRIORITY 5: INDEX CIRCLE (Reload) ---
     if (isIndexPointPose) {
         resetOthers();
-        
-        // Track Index Tip History
         circlePoints.push({x: indexTip.x, y: indexTip.y});
         if (circlePoints.length > CIRCLE_HISTORY_SIZE) circlePoints.shift();
 
-        // Detect Circle Logic
-        // We check if the points cover all 4 quadrants relative to the center of movement
         if (circlePoints.length > 20) {
             if (detectCircle(circlePoints)) {
                 console.log("🔄 CIRCLE DETECTED -> RELOAD");
                 triggerAction("RELOAD");
-                circlePoints = []; // Clear history to prevent double trigger
+                circlePoints = []; 
             }
         }
         return;
     } else {
-        circlePoints = []; // Clear history if pose lost
+        circlePoints = []; 
     }
 
 
-    // -----------------------------------------------------------
-    // PRIORITY 5: MINIMIZE (Open Hand -> Arm -> Swipe)
-    // -----------------------------------------------------------
+    // --- PRIORITY 6: MINIMIZE ---
     if (fingersOpen) {
-        // ... (Keep existing Minimize logic) ...
         const now = Date.now();
         if (!isMinimizeReady) {
             if (currentGestureName !== "ARMING_MINIMIZE") {
@@ -282,60 +243,56 @@ function    processGestures(landmarks) {
         return;
     } 
 
-    // -----------------------------------------------------------
-    // PRIORITY 6: THUMB (Scroll / Switch Tabs)
-    // -----------------------------------------------------------
+    // --- PRIORITY 7: THUMB ---
     if (fingersClosed) {
         resetOthers();
-        
         const dx = thumbTip.x - thumbMCP.x;
         const dy = thumbTip.y - thumbMCP.y;
         const isHorizontal = Math.abs(dx) > Math.abs(dy);
 
-        // Vertical -> Scroll
         if (!isHorizontal) {
             if (dy < -0.02) window.scrollBy(0, -SCROLL_SPEED);
             else if (dy > 0.02) window.scrollBy(0, SCROLL_SPEED);
         }
-        // Horizontal -> Tabs
         else {
             let candidate = null;
             if (dx < -0.02) candidate = "TAB_RIGHT";
             if (dx > 0.02) candidate = "TAB_LEFT";
-            
-            if (candidate) {
-                if (currentGestureName !== candidate) {
-                    currentGestureName = candidate;
-                    holdStartTime = Date.now();
-                    sendFeedback(0.1);
-                } else {
-                    const elapsed = Date.now() - holdStartTime;
-                    sendFeedback(Math.min(elapsed/DWELL_TIME, 1));
-                    if (elapsed >= DWELL_TIME) {
-                        triggerAction(candidate);
-                        currentGestureName = null;
-                        holdStartTime = 0;
-                        sendFeedback(0);
-                    }
-                }
-            } else {
-                resetGestureState();
-            }
+            if (candidate) handleHoldGesture(candidate, candidate);
+            else resetGestureState();
         }
         return;
     }
 
-    // Nothing detected
     resetGestureState();
     previousY = wrist.y;
 }
 
 // --- HELPER FUNCTIONS ---
 
+// THIS WAS MISSING AND CAUSED THE ERROR
+function handleHoldGesture(gestureName, actionCommand) {
+    if (currentGestureName !== gestureName) {
+        currentGestureName = gestureName;
+        holdStartTime = Date.now();
+        sendFeedback(0.1);
+    } else {
+        const elapsed = Date.now() - holdStartTime;
+        const progress = Math.min(elapsed / DWELL_TIME, 1);
+        sendFeedback(progress);
+        
+        if (elapsed >= DWELL_TIME) {
+            console.log("🚀 ACTION FIRED:", gestureName);
+            triggerAction(actionCommand);
+            currentGestureName = null;
+            holdStartTime = 0;
+            sendFeedback(0);
+        }
+    }
+}
+
 function resetOthers() {
     isMinimizeReady = false; 
-    // We don't reset circlePoints here immediately to allow slight flickers, 
-    // but main logic handles it.
 }
 
 function resetGestureState() {
@@ -347,18 +304,12 @@ function resetGestureState() {
 }
 
 function detectCircle(points) {
-    // 1. Calculate Center of the tracked points
     let sumX = 0, sumY = 0;
     for (let p of points) { sumX += p.x; sumY += p.y; }
     const centerX = sumX / points.length;
     const centerY = sumY / points.length;
 
-    // 2. Check Quadrant Traversal
-    // We need to see points in Top-Left, Top-Right, Bottom-Right, Bottom-Left
     let q1=false, q2=false, q3=false, q4=false;
-    let width = 0, height = 0;
-    
-    // Also track bounding box to ensure it's not a tiny wobble
     let minX=1, maxX=0, minY=1, maxY=0;
 
     for (let p of points) {
@@ -370,18 +321,14 @@ function detectCircle(points) {
         const dx = p.x - centerX;
         const dy = p.y - centerY;
         
-        if (dx > 0 && dy < 0) q1 = true; // Top-Right (Computer Vision Y is inverted sometimes, assuming standard)
-        if (dx < 0 && dy < 0) q2 = true; // Top-Left
-        if (dx < 0 && dy > 0) q3 = true; // Bottom-Left
-        if (dx > 0 && dy > 0) q4 = true; // Bottom-Right
+        if (dx > 0 && dy < 0) q1 = true;
+        if (dx < 0 && dy < 0) q2 = true;
+        if (dx < 0 && dy > 0) q3 = true;
+        if (dx > 0 && dy > 0) q4 = true;
     }
 
-    // 3. Validate
     const boxSize = Math.max(maxX - minX, maxY - minY);
-    // Must be large enough (> 0.05) and visit all 4 quadrants
-    if (boxSize > 0.05 && q1 && q2 && q3 && q4) {
-        return true;
-    }
+    if (boxSize > 0.05 && q1 && q2 && q3 && q4) return true;
     return false;
 }
 

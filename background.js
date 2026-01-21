@@ -33,15 +33,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // chrome.sessions requires the 'sessions' permission
         chrome.sessions.restore(); 
     }
+    // 4. BOOKMARK TAB (Ok Gesture)
+    if (request.command === "BOOKMARK") {
+        console.log("Action: Bookmark Tab");
+        lastActionTime = now;
+        // Get the active tab to bookmark it
+        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+            if (tabs[0]) {
+                chrome.bookmarks.create({
+                    title: tabs[0].title,
+                    url: tabs[0].url
+                }).then(() => {
+                    console.log("SUCCESS: Bookmark created!");
+                }).catch((error) => {
+                    console.error("ERROR: Could not bookmark.", error);
+                });
+            }
+        });
+    }
 
-    // 4. RELOAD TAB (Index Circle)
+    // 5. RELOAD TAB (Index Circle)
     if (request.command === "RELOAD") {
         console.log("Action: Reload");
         lastActionTime = now; 
         chrome.tabs.reload();
     }
 
-    // 5. MINIMIZE
+    // 6. MINIMIZE
     if (request.command === "MINIMIZE") {
         console.log("Action: Minimize");
         lastActionTime = now;
@@ -50,7 +68,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 6. TAB SWITCHING
+    // 7. TAB SWITCHING
     if (request.command === "TAB_LEFT") {
         console.log("Action: Tab Left");
         lastActionTime = now;
