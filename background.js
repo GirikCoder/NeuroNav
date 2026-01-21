@@ -7,7 +7,7 @@ const COOLDOWN_MS = 1500;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const now = Date.now();
     
-    // Check Global Cooldown (Except for critical actions like Close/Reload)
+    // Check Global Cooldown
     if (now - lastActionTime < COOLDOWN_MS) return;
 
     // 1. CLOSE TAB (Scissor)
@@ -19,21 +19,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 2. OPEN NEW TAB (Gun Gesture)
+    // 2. OPEN NEW TAB (Gun)
     if (request.command === "NEW_TAB") {
         console.log("Action: New Tab");
         lastActionTime = now;
         chrome.tabs.create({});
     }
 
-    // 3. RELOAD TAB (Index Circle)
+    // 3. RESTORE TAB (Korean Heart) - NEW!
+    if (request.command === "RESTORE") {
+        console.log("Action: Restore Closed Tab");
+        lastActionTime = now;
+        // chrome.sessions requires the 'sessions' permission
+        chrome.sessions.restore(); 
+    }
+
+    // 4. RELOAD TAB (Index Circle)
     if (request.command === "RELOAD") {
         console.log("Action: Reload");
-        lastActionTime = now; // Longer cooldown to prevent double reload
+        lastActionTime = now; 
         chrome.tabs.reload();
     }
 
-    // 4. MINIMIZE
+    // 5. MINIMIZE
     if (request.command === "MINIMIZE") {
         console.log("Action: Minimize");
         lastActionTime = now;
@@ -42,7 +50,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 5. TAB SWITCHING
+    // 6. TAB SWITCHING
     if (request.command === "TAB_LEFT") {
         console.log("Action: Tab Left");
         lastActionTime = now;

@@ -75,7 +75,7 @@ const DWELL_TIME = 500; // 0.5s hold time
 const SCROLL_SPEED = 4; 
 const MINIMIZE_SWIPE_SPEED = 0.015;
 
-function processGestures(landmarks) {
+function    processGestures(landmarks) {
     const wrist = landmarks[0];
     const thumbTip = landmarks[4];
     const thumbMCP = landmarks[2]; 
@@ -113,6 +113,18 @@ function processGestures(landmarks) {
         Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 && // Middle Curled
         Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && // Ring Curled
         Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15    // Pinky Curled
+    );
+
+    // ... (after isGunPose block) ...
+
+    // Korean Heart Pose (Index & Thumb touching, others curled)
+    const thumbIndexDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+    const isKoreanHeartPose = (
+        !fingersClosed && !isScissorPose && !isGunPose &&
+        thumbIndexDist < 0.05 && // Tips Touching/Crossed
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.2 && // Middle Curled (Relaxed)
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.2 && 
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.2    
     );
 
     // Index Point Pose (Only Index Extended, others Curled) -> For Reload Circle
@@ -188,9 +200,34 @@ function processGestures(landmarks) {
         return; // Priority over others
     }
 
-
     // -----------------------------------------------------------
-    // PRIORITY 3: INDEX CIRCLE (Reload)
+    // PRIORITY 3: KOREAN HEART (Restore Tab)
+    // -----------------------------------------------------------
+    if (isKoreanHeartPose) {
+        resetOthers();
+        
+        // Logic: Hold for DWELL_TIME
+        if (currentGestureName !== "RESTORE") {
+            currentGestureName = "RESTORE";
+            holdStartTime = Date.now();
+            sendFeedback(0.1);
+        } else {
+            const elapsed = Date.now() - holdStartTime;
+            const progress = Math.min(elapsed / DWELL_TIME, 1);
+            sendFeedback(progress);
+            
+            if (elapsed >= DWELL_TIME) {
+                console.log("🫶 HEART -> RESTORE TAB");
+                triggerAction("RESTORE");
+                currentGestureName = null;
+                holdStartTime = 0;
+                sendFeedback(0);
+            }
+        }
+        return;
+    }
+    // -----------------------------------------------------------
+    // PRIORITY 4: INDEX CIRCLE (Reload)
     // -----------------------------------------------------------
     if (isIndexPointPose) {
         resetOthers();
@@ -215,7 +252,7 @@ function processGestures(landmarks) {
 
 
     // -----------------------------------------------------------
-    // PRIORITY 4: MINIMIZE (Open Hand -> Arm -> Swipe)
+    // PRIORITY 5: MINIMIZE (Open Hand -> Arm -> Swipe)
     // -----------------------------------------------------------
     if (fingersOpen) {
         // ... (Keep existing Minimize logic) ...
@@ -246,7 +283,7 @@ function processGestures(landmarks) {
     } 
 
     // -----------------------------------------------------------
-    // PRIORITY 5: THUMB (Scroll / Switch Tabs)
+    // PRIORITY 6: THUMB (Scroll / Switch Tabs)
     // -----------------------------------------------------------
     if (fingersClosed) {
         resetOthers();

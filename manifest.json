@@ -6,7 +6,8 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "system.display"
+    "system.display",
+    "sessions"
   ],
   "background": {
     "service_worker": "background.js"
