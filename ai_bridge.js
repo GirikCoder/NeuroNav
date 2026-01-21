@@ -1,4 +1,4 @@
-// ai_bridge.js - Scissor Cut + Smooth Scroll
+// ai_bridge.js - MASTER VERSION: Scissor + Scroll + Two-Stage Minimize
 
 // --- TRUSTED TYPES BYPASS ---
 (function() {
@@ -19,7 +19,7 @@
 })();
 
 // --- AI SETUP ---
-console.log("NeuroNav: Scissor & Scroll Loading...");
+console.log("NeuroNav: Master Logic Loading...");
 async function initializeAI(baseUrl) {
     try {
         const bundleUrl = `${baseUrl}vision_bundle.js`;
@@ -59,22 +59,30 @@ function startDetectionLoop(landmarker, video) {
 
 // --- GESTURE LOGIC ---
 
+// Shared State
 let holdStartTime = 0;
 let currentGestureName = null;
-let scissorState = "CLOSED"; // Start assuming closed to prevent instant fire
+let previousY = null; // For Minimize Swipe
+
+// Minimize State (The "Two-Stage" Logic)
+let isMinimizeReady = false;
+
+// Scissor State
+let scissorState = "CLOSED"; 
 
 // CONFIG
-const DWELL_TIME_TAB = 500; // 0.5s hold for TABS
-const SCROLL_SPEED = 4; // Pixels per frame (Very Low Pace)
+const DWELL_TIME = 500; // 0.5s hold time
+const SCROLL_SPEED = 4; // Pixels per frame
+const MINIMIZE_SWIPE_SPEED = 0.015; // Vertical speed threshold
 
 function processGestures(landmarks) {
     const wrist = landmarks[0];
     const thumbTip = landmarks[4];
     const thumbMCP = landmarks[2]; 
     const indexTip = landmarks[8];
-    const indexPip = landmarks[6];
+    const indexPip = landmarks[6]; // Knuckle
     const middleTip = landmarks[12];
-    const middlePip = landmarks[10];
+    const middlePip = landmarks[10]; // Knuckle
     const ringTip = landmarks[16];
     const pinkyTip = landmarks[20];
 
@@ -88,67 +96,122 @@ function processGestures(landmarks) {
         Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15
     );
 
-    // Scissor Pose (Index & Middle Extended, Ring & Pinky Curled)
+    // Scissor Pose (Index/Middle Extended, Ring/Pinky Curled)
     const isScissorPose = (
         !fingersClosed &&
-        indexTip.y < indexPip.y && // Index Up
-        middleTip.y < middlePip.y && // Middle Up
-        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && // Ring curled
-        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15 // Pinky curled
+        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > Math.hypot(indexPip.x - wrist.x, indexPip.y - wrist.y) && // Index extended
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) > Math.hypot(middlePip.x - wrist.x, middlePip.y - wrist.y) && // Middle extended
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.2 && // Ring curled (relaxed)
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.2 // Pinky curled
     );
 
-    // 2. SCISSOR LOGIC (Close Tab)
+    // Open Hand (All fingers extended) - Explicitly NOT Scissor
+    const fingersOpen = (
+        !isScissorPose &&
+        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.2 &&
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) > 0.2 &&
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) > 0.2 &&
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) > 0.2
+    );
+
+    // -----------------------------------------------------------
+    // PRIORITY 1: SCISSOR (Close Tab)
+    // -----------------------------------------------------------
     if (isScissorPose) {
-        // Calculate distance between Index and Middle tips
+        isMinimizeReady = false; // Reset minimize if we switch to scissor
+
         const scissorDist = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
         
         // State A: Open Scissors (Ready)
-        if (scissorDist > 0.08) {
+        if (scissorDist > 0.05) {
             if (scissorState !== "OPEN") {
                 console.log("✂️ SCISSOR READY");
                 scissorState = "OPEN";
-                sendFeedback(0.5); // Blue bar halfway to show ready
+                sendFeedback(0.5); // Blue bar halfway
             }
         }
         // State B: Closed Scissors (Cut!)
-        else if (scissorDist < 0.03) {
+        else if (scissorDist < 0.04) {
             if (scissorState === "OPEN") {
-                console.log("✂️ SCISSOR CUT -> CLOSE TAB");
+                console.log("✂️ CUT -> CLOSE TAB");
                 triggerAction("CLOSE_TAB");
-                scissorState = "CLOSED"; // Reset
+                scissorState = "CLOSED"; 
                 sendFeedback(0);
             }
         }
-        return; // Priority over other gestures
-    } else {
-        // If we lose the pose, just reset state silently
+        return; // Stop here
+    } 
+    else {
+        // Reset Scissor State silently
         if (scissorState === "OPEN") {
              scissorState = "CLOSED";
              sendFeedback(0);
         }
     }
 
+    // -----------------------------------------------------------
+    // PRIORITY 2: MINIMIZE (Open Hand -> Arm -> Swipe)
+    // -----------------------------------------------------------
+    const now = Date.now();
 
-    // 3. THUMB LOGIC (Scroll vs Tabs)
-    if (fingersClosed) {
-        // Calculate Thumb Vector (Tip relative to Knuckle)
-        const dx = thumbTip.x - thumbMCP.x;
-        const dy = thumbTip.y - thumbMCP.y; // Remember: Y is usually 0 at top in computer vision
+    if (fingersOpen) {
         
-        // Determine Dominant Axis
+        // Step 1: Arming Phase (Fill the Bar)
+        if (!isMinimizeReady) {
+            if (currentGestureName !== "ARMING_MINIMIZE") {
+                currentGestureName = "ARMING_MINIMIZE";
+                holdStartTime = now;
+                sendFeedback(0.1);
+            } else {
+                const elapsed = now - holdStartTime;
+                const progress = Math.min(elapsed / DWELL_TIME, 1);
+                sendFeedback(progress);
+                
+                if (elapsed >= DWELL_TIME) {
+                    isMinimizeReady = true; // UNLOCKED!
+                    sendFeedback(1); // Bar stays green/full
+                }
+            }
+        } 
+        
+        // Step 2: Trigger Phase (Swipe Down)
+        else {
+            sendFeedback(1); // Keep visual "Ready" cue
+            
+            if (previousY !== null) {
+                const deltaY = wrist.y - previousY;
+                // Positive deltaY = Moving Down
+                if (deltaY > MINIMIZE_SWIPE_SPEED) {
+                    console.log("⬇️ SWIPE -> MINIMIZE");
+                    triggerAction("MINIMIZE");
+                    
+                    // Reset
+                    isMinimizeReady = false; 
+                    currentGestureName = null;
+                    sendFeedback(0);
+                }
+            }
+        }
+    } 
+    
+    // -----------------------------------------------------------
+    // PRIORITY 3: THUMB (Scroll / Switch Tabs)
+    // -----------------------------------------------------------
+    else if (fingersClosed) {
+        isMinimizeReady = false; // Reset minimize
+
+        const dx = thumbTip.x - thumbMCP.x;
+        const dy = thumbTip.y - thumbMCP.y;
         const isHorizontal = Math.abs(dx) > Math.abs(dy);
         const isVertical = !isHorizontal;
 
-        // A. VERTICAL -> SCROLLING (Continuous Action)
+        // A. VERTICAL -> SCROLLING (Immediate)
         if (isVertical) {
-            // Note: In visual coords, smaller Y is higher up.
-            // If Tip is ABOVE Knuckle (dy < 0) -> Thumb Up -> Scroll Up
             if (dy < -0.02) { 
                 window.scrollBy(0, -SCROLL_SPEED); // Scroll Up
-                resetGestureState(); // No holding needed
+                resetGestureState();
                 return;
             }
-            // If Tip is BELOW Knuckle (dy > 0) -> Thumb Down -> Scroll Down
             else if (dy > 0.02) {
                 window.scrollBy(0, SCROLL_SPEED); // Scroll Down
                 resetGestureState();
@@ -156,26 +219,24 @@ function processGestures(landmarks) {
             }
         }
 
-        // B. HORIZONTAL -> TABS (Held Action)
+        // B. HORIZONTAL -> TABS (Held)
         let candidateGesture = null;
         if (isHorizontal) {
-            if (dx < -0.02) candidateGesture = "TAB_RIGHT"; // Left points Right (Mirror)
+            if (dx < -0.02) candidateGesture = "TAB_RIGHT"; 
             if (dx > 0.02) candidateGesture = "TAB_LEFT";
         }
 
-        // Process Hold Timer for Tabs
         if (candidateGesture) {
-            const now = Date.now();
             if (currentGestureName !== candidateGesture) {
                 currentGestureName = candidateGesture;
                 holdStartTime = now;
                 sendFeedback(0.1);
             } else {
-                const elapsedTime = now - holdStartTime;
-                const progress = Math.min(elapsedTime / DWELL_TIME_TAB, 1);
+                const elapsed = now - holdStartTime;
+                const progress = Math.min(elapsed / DWELL_TIME, 1);
                 sendFeedback(progress);
                 
-                if (elapsedTime >= DWELL_TIME_TAB) {
+                if (elapsed >= DWELL_TIME) {
                     triggerAction(candidateGesture);
                     currentGestureName = null; 
                     holdStartTime = 0;
@@ -183,12 +244,20 @@ function processGestures(landmarks) {
                 }
             }
         } else {
+            // Thumb is neutral? Reset.
             resetGestureState();
         }
     } 
+    
+    // -----------------------------------------------------------
+    // NOTHING DETECTED
+    // -----------------------------------------------------------
     else {
         resetGestureState();
     }
+
+    // Update History for Swipe
+    previousY = wrist.y;
 }
 
 function resetGestureState() {
@@ -197,6 +266,7 @@ function resetGestureState() {
         holdStartTime = 0;
         sendFeedback(0);
     }
+    isMinimizeReady = false; // Lose "Ready" status if hand drops
 }
 
 function sendFeedback(value) {
