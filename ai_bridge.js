@@ -1,4 +1,4 @@
-// ai_bridge.js - Universal Injector + Motion Gestures
+// ai_bridge.js - Scissor Cut + Smooth Scroll
 
 // --- TRUSTED TYPES BYPASS ---
 (function() {
@@ -19,8 +19,7 @@
 })();
 
 // --- AI SETUP ---
-console.log("NeuroNav: Motion Gestures Loading...");
-
+console.log("NeuroNav: Scissor & Scroll Loading...");
 async function initializeAI(baseUrl) {
     try {
         const bundleUrl = `${baseUrl}vision_bundle.js`;
@@ -38,7 +37,6 @@ async function initializeAI(baseUrl) {
             numHands: 1
         });
 
-        console.log("NeuroNav: 🧠 AI Ready!");
         const videoElement = document.getElementById("neuronav-video");
         if (videoElement) startDetectionLoop(handLandmarker, videoElement);
     } catch (e) { console.error(e); }
@@ -49,7 +47,9 @@ function startDetectionLoop(landmarker, video) {
         if (!video.paused && !video.ended) {
             const results = await landmarker.detectForVideo(video, performance.now());
             if (results.landmarks && results.landmarks.length > 0) {
-                detectAdvancedGesture(results.landmarks[0]);
+                processGestures(results.landmarks[0]);
+            } else {
+                resetGestureState();
             }
         }
         requestAnimationFrame(loop);
@@ -58,78 +58,153 @@ function startDetectionLoop(landmarker, video) {
 }
 
 // --- GESTURE LOGIC ---
-let previousX = null;
-let previousY = null; // NEW: Track vertical movement
 
-function detectAdvancedGesture(landmarks) {
+let holdStartTime = 0;
+let currentGestureName = null;
+let scissorState = "CLOSED"; // Start assuming closed to prevent instant fire
+
+// CONFIG
+const DWELL_TIME_TAB = 500; // 0.5s hold for TABS
+const SCROLL_SPEED = 4; // Pixels per frame (Very Low Pace)
+
+function processGestures(landmarks) {
     const wrist = landmarks[0];
+    const thumbTip = landmarks[4];
+    const thumbMCP = landmarks[2]; 
     const indexTip = landmarks[8];
+    const indexPip = landmarks[6];
     const middleTip = landmarks[12];
+    const middlePip = landmarks[10];
     const ringTip = landmarks[16];
     const pinkyTip = landmarks[20];
-    const indexPip = landmarks[6]; 
-    const middlePip = landmarks[10]; 
 
-    // 1. Define Poses
-    const isTwoFingers = (
-        indexTip.y < indexPip.y && 
-        middleTip.y < middlePip.y && 
-        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && 
-        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15 
+    // 1. DETECT POSE
+
+    // Fist (4 fingers curled)
+    const fingersClosed = (
+        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) < 0.15 &&
+        Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) < 0.15 &&
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 &&
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15
     );
 
-    // Strict Open Hand check
-    const isOpenHand = (
-        !isTwoFingers &&
-        Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) > 0.2 &&
-        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) > 0.2
+    // Scissor Pose (Index & Middle Extended, Ring & Pinky Curled)
+    const isScissorPose = (
+        !fingersClosed &&
+        indexTip.y < indexPip.y && // Index Up
+        middleTip.y < middlePip.y && // Middle Up
+        Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) < 0.15 && // Ring curled
+        Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y) < 0.15 // Pinky curled
     );
 
-    // 2. Track Motion
-    const currentX = wrist.x;
-    const currentY = wrist.y;
-
-    if (previousX !== null && previousY !== null) {
-        const deltaX = currentX - previousX;
-        const deltaY = currentY - previousY;
-        const SWIPE_SPEED = 0.03; // Velocity threshold
-
-        // ACTION 1: TAB SWITICHING (Two Fingers + Horizontal Move)
-        if (isTwoFingers) {
-            if (deltaX < -SWIPE_SPEED) { 
-                 window.postMessage({ type: "NEURONAV_ACTION", action: "TAB_LEFT" }, "*");
-            } 
-            else if (deltaX > SWIPE_SPEED) { 
-                 window.postMessage({ type: "NEURONAV_ACTION", action: "TAB_RIGHT" }, "*");
+    // 2. SCISSOR LOGIC (Close Tab)
+    if (isScissorPose) {
+        // Calculate distance between Index and Middle tips
+        const scissorDist = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
+        
+        // State A: Open Scissors (Ready)
+        if (scissorDist > 0.08) {
+            if (scissorState !== "OPEN") {
+                console.log("✂️ SCISSOR READY");
+                scissorState = "OPEN";
+                sendFeedback(0.5); // Blue bar halfway to show ready
             }
         }
-
-        // ACTION 2 & 3: OPEN HAND GESTURES
-        if (isOpenHand) {
-            // A. MINIMIZE (Move Downward)
-            // Note: In computer vision, Y increases as you go DOWN the screen.
-            // So positive deltaY means moving down.
-            if (deltaY > SWIPE_SPEED) {
-                console.log("⬇️ SWIPE DOWN DETECTED");
-                window.postMessage({ type: "NEURONAV_ACTION", action: "MINIMIZE" }, "*");
+        // State B: Closed Scissors (Cut!)
+        else if (scissorDist < 0.03) {
+            if (scissorState === "OPEN") {
+                console.log("✂️ SCISSOR CUT -> CLOSE TAB");
+                triggerAction("CLOSE_TAB");
+                scissorState = "CLOSED"; // Reset
+                sendFeedback(0);
             }
-
-            // B. SPLIT SCREEN (Hand at Edges)
-            // Only trigger if we aren't swiping down (to avoid conflicts)
-            else if (Math.abs(deltaY) < SWIPE_SPEED) {
-                if (currentX < 0.15) { // Far Left Edge
-                    window.postMessage({ type: "NEURONAV_ACTION", action: "SNAP_RIGHT" }, "*");
-                } 
-                else if (currentX > 0.85) { // Far Right Edge
-                    window.postMessage({ type: "NEURONAV_ACTION", action: "SNAP_LEFT" }, "*");
-                }
-            }
+        }
+        return; // Priority over other gestures
+    } else {
+        // If we lose the pose, just reset state silently
+        if (scissorState === "OPEN") {
+             scissorState = "CLOSED";
+             sendFeedback(0);
         }
     }
 
-    // Update history
-    previousX = currentX;
-    previousY = currentY;
+
+    // 3. THUMB LOGIC (Scroll vs Tabs)
+    if (fingersClosed) {
+        // Calculate Thumb Vector (Tip relative to Knuckle)
+        const dx = thumbTip.x - thumbMCP.x;
+        const dy = thumbTip.y - thumbMCP.y; // Remember: Y is usually 0 at top in computer vision
+        
+        // Determine Dominant Axis
+        const isHorizontal = Math.abs(dx) > Math.abs(dy);
+        const isVertical = !isHorizontal;
+
+        // A. VERTICAL -> SCROLLING (Continuous Action)
+        if (isVertical) {
+            // Note: In visual coords, smaller Y is higher up.
+            // If Tip is ABOVE Knuckle (dy < 0) -> Thumb Up -> Scroll Up
+            if (dy < -0.02) { 
+                window.scrollBy(0, -SCROLL_SPEED); // Scroll Up
+                resetGestureState(); // No holding needed
+                return;
+            }
+            // If Tip is BELOW Knuckle (dy > 0) -> Thumb Down -> Scroll Down
+            else if (dy > 0.02) {
+                window.scrollBy(0, SCROLL_SPEED); // Scroll Down
+                resetGestureState();
+                return;
+            }
+        }
+
+        // B. HORIZONTAL -> TABS (Held Action)
+        let candidateGesture = null;
+        if (isHorizontal) {
+            if (dx < -0.02) candidateGesture = "TAB_RIGHT"; // Left points Right (Mirror)
+            if (dx > 0.02) candidateGesture = "TAB_LEFT";
+        }
+
+        // Process Hold Timer for Tabs
+        if (candidateGesture) {
+            const now = Date.now();
+            if (currentGestureName !== candidateGesture) {
+                currentGestureName = candidateGesture;
+                holdStartTime = now;
+                sendFeedback(0.1);
+            } else {
+                const elapsedTime = now - holdStartTime;
+                const progress = Math.min(elapsedTime / DWELL_TIME_TAB, 1);
+                sendFeedback(progress);
+                
+                if (elapsedTime >= DWELL_TIME_TAB) {
+                    triggerAction(candidateGesture);
+                    currentGestureName = null; 
+                    holdStartTime = 0;
+                    sendFeedback(0);
+                }
+            }
+        } else {
+            resetGestureState();
+        }
+    } 
+    else {
+        resetGestureState();
+    }
+}
+
+function resetGestureState() {
+    if (currentGestureName !== null) {
+        currentGestureName = null;
+        holdStartTime = 0;
+        sendFeedback(0);
+    }
+}
+
+function sendFeedback(value) {
+    window.postMessage({ type: "NEURONAV_FEEDBACK", progress: value }, "*");
+}
+
+function triggerAction(actionName) {
+    window.postMessage({ type: "NEURONAV_ACTION", action: actionName }, "*");
 }
 
 window.addEventListener("message", async (e) => {

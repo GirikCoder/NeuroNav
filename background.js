@@ -1,45 +1,51 @@
 console.log("NeuroNav: Background Service Worker Running");
 
-// GLOBAL COOLDOWNS (Different actions need different timers)
-let lastTabTime = 0;
-let lastWinTime = 0;
+// GLOBAL COOLDOWN
+let lastActionTime = 0;
+const COOLDOWN_MS = 1500;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const now = Date.now();
+    
+    // Check Global Cooldown (Except for Close Tab, which should apply instantly)
+    if (now - lastActionTime < COOLDOWN_MS) return;
 
-    // 1. TAB SWITCHING (Cooldown: 800ms)
-    if (request.command === "TAB_LEFT" || request.command === "TAB_RIGHT") {
-        if (now - lastTabTime > 800) {
-            lastTabTime = now;
-            navigateTabs(request.command === "TAB_RIGHT" ? 1 : -1);
-        }
+    // 1. CLOSE TAB (Scissor)
+    if (request.command === "CLOSE_TAB") {
+        console.log("Action: Close Tab");
+        lastActionTime = now;
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) chrome.tabs.remove(tabs[0].id);
+        });
     }
 
-    // 2. MINIMIZE (Cooldown: 2 seconds)
+    // 2. MINIMIZE
     if (request.command === "MINIMIZE") {
-        if (now - lastWinTime > 2000) {
-            lastWinTime = now;
-            chrome.windows.getCurrent((win) => {
-                chrome.windows.update(win.id, { state: "minimized" });
-            });
-        }
+        console.log("Action: Minimize");
+        lastActionTime = now;
+        chrome.windows.getCurrent((win) => {
+            chrome.windows.update(win.id, { state: "minimized" });
+        });
     }
 
-    // 3. SPLIT SCREEN (Cooldown: 1.5 seconds)
-    if (request.command === "SNAP_LEFT" || request.command === "SNAP_RIGHT") {
-        if (now - lastWinTime > 1500) {
-            lastWinTime = now;
-            snapWindow(request.command === "SNAP_LEFT" ? "LEFT" : "RIGHT");
-        }
+    // 3. TAB SWITCHING
+    if (request.command === "TAB_LEFT") {
+        console.log("Action: Tab Left");
+        lastActionTime = now;
+        navigateTabs(-1);
+    }
+
+    if (request.command === "TAB_RIGHT") {
+        console.log("Action: Tab Right");
+        lastActionTime = now;
+        navigateTabs(1);
     }
 });
 
-// Helper: Switch Tabs
 async function navigateTabs(direction) {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     const activeTab = tabs.find(tab => tab.active);
     if (activeTab) {
-        // Calculate new index with wrapping (Loop around)
         let nextIndex = activeTab.index + direction;
         if (nextIndex >= tabs.length) nextIndex = 0;
         if (nextIndex < 0) nextIndex = tabs.length - 1;
@@ -47,26 +53,4 @@ async function navigateTabs(direction) {
         const nextTab = tabs.find(tab => tab.index === nextIndex);
         if (nextTab) chrome.tabs.update(nextTab.id, { active: true });
     }
-}
-
-// Helper: Snap Window
-async function snapWindow(side) {
-    const window = await chrome.windows.getCurrent();
-    const display = await chrome.system.display.getInfo();
-    // Use primary display for simplicity
-    const primary = display.find(d => d.isPrimary) || display[0];
-    const workArea = primary.workArea;
-
-    const width = Math.floor(workArea.width / 2);
-    const height = workArea.height;
-    const top = workArea.top;
-    const left = side === "LEFT" ? workArea.left : workArea.left + width;
-
-    chrome.windows.update(window.id, {
-        state: "normal", // Must un-maximize to move
-        left: left,
-        top: top,
-        width: width,
-        height: height
-    });
 }
