@@ -1,3 +1,4 @@
+// background.js
 console.log("NeuroNav: Background Service Worker Running");
 
 // GLOBAL COOLDOWN
@@ -10,7 +11,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Check Global Cooldown
     if (now - lastActionTime < COOLDOWN_MS) return;
 
-    // 1. CLOSE TAB (Scissor)
+    // 1. CLOSE TAB (Pinky Up)
     if (request.command === "CLOSE_TAB") {
         console.log("Action: Close Tab");
         lastActionTime = now;
@@ -26,18 +27,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.tabs.create({});
     }
 
-    // 3. RESTORE TAB (Korean Heart) - NEW!
+    // 3. RESTORE TAB (Rock Sign)
     if (request.command === "RESTORE") {
         console.log("Action: Restore Closed Tab");
         lastActionTime = now;
-        // chrome.sessions requires the 'sessions' permission
-        chrome.sessions.restore(); 
+        if (chrome.sessions && chrome.sessions.restore) {
+            chrome.sessions.restore();
+        } else {
+            console.error("Sessions API not available.");
+        }
     }
+
     // 4. BOOKMARK TAB (Ok Gesture)
     if (request.command === "BOOKMARK") {
         console.log("Action: Bookmark Tab");
         lastActionTime = now;
-        // Get the active tab to bookmark it
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             if (tabs[0]) {
                 chrome.bookmarks.create({
@@ -59,7 +63,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.tabs.reload();
     }
 
-    // 6. MINIMIZE
+    // 6. MINIMIZE (Open Hand Swipe)
     if (request.command === "MINIMIZE") {
         console.log("Action: Minimize");
         lastActionTime = now;
@@ -68,7 +72,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
 
-    // 7. TAB SWITCHING
+    // 7. TAB SWITCHING (Thumb Swipe)
     if (request.command === "TAB_LEFT") {
         console.log("Action: Tab Left");
         lastActionTime = now;
