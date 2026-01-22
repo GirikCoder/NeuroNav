@@ -1,4 +1,4 @@
-// content.js - Video & UI Feedback
+
 
 // 1. Setup Video
 const videoElement = document.createElement('video');
@@ -61,8 +61,15 @@ window.addEventListener("message", (event) => {
         }
     }
 
-    // B. Send Command to Background
+    // B. Send Command to Background (UPDATED FOR BOOKMARK)
     if (event.data.type === "NEURONAV_ACTION") {
-        chrome.runtime.sendMessage({ command: event.data.action });
+        // Send command AND page data (Title + URL) to background
+        chrome.runtime.sendMessage({ 
+            command: event.data.action,
+            data: {
+                title: document.title,
+                url: window.location.href
+            }
+        });
     }
 });
