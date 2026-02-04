@@ -2,7 +2,7 @@
 
 ## 1. Feature Overview
 
-**NeuroNav** acts as a privacy-centric, gesture-based interface layer for web browsers. By bypassing traditional input devices, it allows users to navigate the web using hand movements captured via webcam. The system relies on the **Antigravity** engine framework to execute high-performance computer vision tasks entirely on the client side.
+**NeuroNav** acts as a privacy-centric, gesture-based interface layer for web browsers. By bypassing traditional input devices, it allows users to navigate the web using hand movements captured via webcam. The system  execute high-performance computer vision tasks entirely on the client side.
 
 **Core Capabilities:**
 * ✋ **Real-Time Gesture Recognition:** Sophisticated hand tracking using machine learning.
