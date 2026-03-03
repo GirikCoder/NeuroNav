@@ -1,4 +1,3 @@
-
 console.log("NeuroNav: Background Service Worker Running");
 
 let lastActionTime = 0;
@@ -31,27 +30,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (chrome.sessions && chrome.sessions.restore) chrome.sessions.restore();
     }
 
-    // 4. BOOKMARK (Robust)
+    // 4. BOOKMARK (Two-Way Toggle Logic)
     if (request.command === "BOOKMARK") {
-        console.log("Action: Bookmark");
+        console.log("Action: Bookmark Toggle");
         lastActionTime = now;
         const pageTitle = request.data ? request.data.title : "New Bookmark";
         const pageUrl = request.data ? request.data.url : null;
 
         if (pageUrl) {
-            chrome.bookmarks.create({ parentId: '1', title: pageTitle, url: pageUrl }, () => {
-                if (chrome.runtime.lastError) {
-                    chrome.bookmarks.create({ title: pageTitle, url: pageUrl });
+            // Check if the URL is already bookmarked
+            chrome.bookmarks.search({ url: pageUrl }, (results) => {
+                if (results && results.length > 0) {
+                    // ALREADY BOOKMARKED -> REMOVE IT
+                    console.log("Removing existing bookmark...");
+                    results.forEach(bm => chrome.bookmarks.remove(bm.id));
+                } else {
+                    // NOT BOOKMARKED -> ADD IT
+                    console.log("Adding new bookmark...");
+                    chrome.bookmarks.create({ parentId: '1', title: pageTitle, url: pageUrl }, () => {
+                        if (chrome.runtime.lastError) {
+                            chrome.bookmarks.create({ title: pageTitle, url: pageUrl });
+                        }
+                    });
                 }
             });
         }
     }
 
-    // 5. RELOAD (UPDATED & FIXED)
+    // 5. RELOAD 
     if (request.command === "RELOAD") {
         console.log("Action: Reload");
         lastActionTime = now; 
-        // Targeted reload for the active tab
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) chrome.tabs.reload(tabs[0].id);
         });

@@ -1,12 +1,14 @@
 //Scroll Up/Down	Fist + Thumb Up/Down
 //Next/Prev Tab	Thumb + Index (Gun)
 //Close Tab	Index + Middle (Scissor)
-//Restore Tab	Index + Pinky (Rock Sign)
+//Restore Tab	Spiderman
 //New Tab	Index + Middle + Ring (Three Fingers)
 //Reload Tab	Pinky Up (Pinky Promise)
 //Minimize	All Fingers Extended (Open Hand Swipe)
 //Bookmark	Thumb + Pinky (Call Me Sign)
 
+
+// ai_bridge.js - Skeleton Overlay & Smooth Adaptive Logic added
 
 (function() {
     if (window.trustedTypes && window.trustedTypes.createPolicy && !window.trustedTypes.defaultPolicy) {
@@ -25,7 +27,7 @@
     }
 })();
 
-console.log("NeuroNav: Master V10 Loading...");
+console.log("NeuroNav: Skeletal Tracking & Smoothing Loading...");
 async function initializeAI(baseUrl) {
     try {
         const bundleUrl = `${baseUrl}vision_bundle.js`;
@@ -53,8 +55,10 @@ function startDetectionLoop(landmarker, video) {
         if (!video.paused && !video.ended) {
             const results = await landmarker.detectForVideo(video, performance.now());
             if (results.landmarks && results.landmarks.length > 0) {
+                drawSkeletalLines(results.landmarks[0]); // Draw the lines!
                 processGestures(results.landmarks[0]);
             } else {
+                clearCanvas(); // Hand left screen
                 resetGestureState();
             }
         }
@@ -62,6 +66,51 @@ function startDetectionLoop(landmarker, video) {
     }
     loop();
 }
+
+// --- DRAWING THE SKELETON ---
+const HAND_CONNECTIONS = [
+    [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+    [0, 5], [5, 6], [6, 7], [7, 8], // Index
+    [5, 9], [9, 10], [10, 11], [11, 12], // Middle
+    [9, 13], [13, 14], [14, 15], [15, 16], // Ring
+    [13, 17], [17, 18], [18, 19], [19, 20], // Pinky
+    [0, 17] // Wrist to Pinky base
+];
+
+function drawSkeletalLines(landmarks) {
+    const canvas = document.getElementById("neuronav-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Wipe old lines
+
+    // --- UPDATED: THIN & LIGHT STYLING ---
+    ctx.lineWidth = 1.5; // Thinner lines (was 3)
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"; // Light, semi-transparent white
+    ctx.fillStyle = "rgba(0, 229, 255, 0.9)"; // Bright cyan for the tiny joints
+
+    // 1. Draw connections (lines)
+    HAND_CONNECTIONS.forEach(([startIdx, endIdx]) => {
+        const p1 = landmarks[startIdx];
+        const p2 = landmarks[endIdx];
+        ctx.beginPath();
+        ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+        ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+        ctx.stroke();
+    });
+
+    // 2. Draw landmarks (dots)
+    landmarks.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x * canvas.width, p.y * canvas.height, 2, 0, 2 * Math.PI); // Smaller dots (was 4)
+        ctx.fill();
+    });
+}
+
+function clearCanvas() {
+    const canvas = document.getElementById("neuronav-canvas");
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+}
+
 
 // --- GESTURE LOGIC ---
 
@@ -84,14 +133,26 @@ function processGestures(landmarks) {
     const pinkyTip = landmarks[20];
     const pinkyMCP = landmarks[17];
 
-    // Helpers
+    // --- THE SMOOTHNESS SECRET (Distance Adaptive Logic) ---
+    // Measure the actual size of the hand right now. 
+    // This scales the math so it works up close or far away!
+    const handSize = Math.hypot(middleMCP.x - wrist.x, middleMCP.y - wrist.y);
+
     function isFolded(tip, mcp) {
-        return Math.hypot(tip.x - mcp.x, tip.y - mcp.y) < 0.09 || Math.hypot(tip.x - wrist.x, tip.y - wrist.y) < 0.12;
-    }
-    function isExtended(tip, mcp) {
-        return Math.hypot(tip.x - mcp.x, tip.y - mcp.y) > 0.10;
+        // If the tip is barely further from the wrist than the knuckle, it's folded.
+        const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+        const dMcp = Math.hypot(mcp.x - wrist.x, mcp.y - wrist.y);
+        return dTip < dMcp + (handSize * 0.3); 
     }
 
+    function isExtended(tip, mcp) {
+        // If the tip is significantly further away from the wrist than the knuckle, it's extended.
+        const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+        const dMcp = Math.hypot(mcp.x - wrist.x, mcp.y - wrist.y);
+        return dTip > dMcp + (handSize * 0.6); 
+    }
+
+    // Process all fingers with the new smooth math
     const indexFolded = isFolded(indexTip, indexMCP);
     const middleFolded = isFolded(middleTip, middleMCP);
     const ringFolded = isFolded(ringTip, ringMCP);
@@ -101,39 +162,23 @@ function processGestures(landmarks) {
     const middleExt = isExtended(middleTip, middleMCP);
     const ringExt = isExtended(ringTip, ringMCP);
     const pinkyExt = isExtended(pinkyTip, pinkyMCP);
-    const thumbExtended = Math.hypot(thumbTip.x - indexMCP.x, thumbTip.y - indexMCP.y) > 0.12;
+    
+    // Thumb needs its own specialized logic because it folds sideways
+    const thumbExtended = Math.hypot(thumbTip.x - indexMCP.x, thumbTip.y - indexMCP.y) > (handSize * 0.8);
     const thumbFolded = !thumbExtended;
 
     // --- POSES ---
-
-    // 1. SCROLL (Fist + Thumb)
     const isScrollPose = thumbExtended && indexFolded && middleFolded && ringFolded && pinkyFolded;
-
-    // 2. BOOKMARK (Call Me: Thumb + Pinky)
     const isCallMePose = thumbExtended && pinkyExt && indexFolded && middleFolded && ringFolded;
-
-    // 3. GUN (Nav: Thumb + Index)
     const isGunPose = thumbExtended && indexExt && middleFolded && ringFolded && pinkyFolded;
-
-    // 4. SCISSOR (Close: Index + Middle)
     const isScissorPose = indexExt && middleExt && ringFolded && pinkyFolded && thumbFolded;
-
-    // 5. ROCK (Restore: Index + Pinky)
     const isRockPose = indexExt && pinkyExt && middleFolded && ringFolded;
-
-    // 6. PINKY PROMISE (Reload: Pinky Only)
     const isPinkyPose = pinkyExt && indexFolded && middleFolded && ringFolded && thumbFolded;
-
-    // 7. NEW TAB (3 Fingers)
     const isThreeFingers = indexExt && middleExt && ringExt && pinkyFolded;
-
-    // 8. MINIMIZE (Open Hand)
     const isOpenHand = indexExt && middleExt && ringExt && pinkyExt && thumbExtended;
-
 
     // --- PRIORITY ---
 
-    // A. SCROLL (Joystick)
     if (isScrollPose) {
         resetOthers(); 
         const dy = thumbTip.y - thumbMCP.y;
@@ -144,20 +189,17 @@ function processGestures(landmarks) {
         return;
     }
 
-    // B. BOOKMARK
     if (isCallMePose) {
         resetOthers();
-        handleHoldGesture("BOOKMARK", "BOOKMARK");
+        handleHoldGesture("BOOKMARK", "BOOKMARK",null, true);
         return;
     }
 
-    // C. MINIMIZE
     if (isOpenHand) {
         handleHoldGesture("MINIMIZE", "MINIMIZE", MINIMIZE_DWELL);
         return;
     }
 
-    // D. NAV TABS
     if (isGunPose) {
         resetOthers();
         const dx = indexTip.x - indexMCP.x; 
@@ -166,28 +208,24 @@ function processGestures(landmarks) {
         return;
     }
 
-    // E. RELOAD (Pinky)
     if (isPinkyPose) {
         resetOthers();
         handleHoldGesture("RELOAD", "RELOAD");
         return;
     }
 
-    // F. RESTORE
     if (isRockPose) {
         resetOthers();
         handleHoldGesture("RESTORE", "RESTORE");
         return;
     }
 
-    // G. NEW TAB
     if (isThreeFingers) {
         resetOthers();
         handleHoldGesture("NEW_TAB", "NEW_TAB");
         return;
     }
 
-    // H. CLOSE TAB
     if (isScissorPose) {
         resetOthers();
         handleHoldGesture("CLOSE_TAB", "CLOSE_TAB");
@@ -197,8 +235,15 @@ function processGestures(landmarks) {
     resetGestureState();
 }
 
-function handleHoldGesture(gestureName, actionCommand, customDwell) {
+function handleHoldGesture(gestureName, actionCommand, customDwell, lockAfterFire = false) {
     const dwell = customDwell || DWELL_TIME;
+    
+    // Anti-Machine-Gun Lock (Only triggers if lockAfterFire is true)
+    if (currentGestureName === gestureName + "_FIRED") {
+        sendFeedback(1); // Keep the blue bar full to show it's locked
+        return;
+    }
+
     if (currentGestureName !== gestureName) {
         currentGestureName = gestureName;
         holdStartTime = Date.now();
@@ -207,11 +252,21 @@ function handleHoldGesture(gestureName, actionCommand, customDwell) {
         const elapsed = Date.now() - holdStartTime;
         const progress = Math.min(elapsed / dwell, 1);
         sendFeedback(progress);
+        
         if (elapsed >= dwell) {
             triggerAction(actionCommand);
-            currentGestureName = null;
-            holdStartTime = 0;
-            sendFeedback(0);
+            
+            // If it's a "Locked" gesture (like  Bookmark), wait for hand reset
+            if (lockAfterFire) {
+                currentGestureName = gestureName + "_FIRED"; 
+                holdStartTime = 0;
+                setTimeout(() => sendFeedback(0), 500); 
+            } else {
+                // Normal behavior (reset immediately so you can fire again smoothly)
+                currentGestureName = null;
+                holdStartTime = 0;
+                sendFeedback(0);
+            }
         }
     }
 }
