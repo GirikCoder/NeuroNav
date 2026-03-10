@@ -10,7 +10,6 @@ Object.assign(videoElement.style, {
 });
 videoElement.autoplay = true;
 videoElement.muted = true;
-document.body.appendChild(videoElement);
 
 // 2. Setup Drawing Canvas (Skeletal Overlay)
 const canvasElement = document.createElement('canvas');
@@ -21,7 +20,6 @@ Object.assign(canvasElement.style, {
     position: "fixed", top: "10px", right: "10px", width: "160px", height: "120px",
     zIndex: "9999", transform: "scaleX(-1)", borderRadius: "10px", pointerEvents: "none"
 });
-document.body.appendChild(canvasElement);
 
 // 3. Setup Status Bar
 const statusContainer = document.createElement('div');
@@ -35,7 +33,6 @@ Object.assign(progressBar.style, {
     width: "0%", height: "100%", background: "#00e5ff", transition: "width 0.1s linear"
 });
 statusContainer.appendChild(progressBar);
-document.body.appendChild(statusContainer);
 
 // 4. SETUP COLLAPSIBLE LEGEND
 const legendContainer = document.createElement('div');
@@ -84,12 +81,22 @@ legendHeader.onclick = () => {
 
 legendContainer.appendChild(legendHeader);
 legendContainer.appendChild(legendBody);
-document.body.appendChild(legendContainer);
 
 // 5. Camera Access
 navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => { videoElement.srcObject = stream; })
-    .catch(e => console.error("Camera Error:", e));
+    .then(stream => { 
+        // Only append UI elements to DOM if camera succeeds
+        document.body.appendChild(videoElement);
+        document.body.appendChild(canvasElement);
+        document.body.appendChild(statusContainer);
+        document.body.appendChild(legendContainer);
+
+        videoElement.srcObject = stream; 
+        
+        // 6. Inject Bridge only when camera is ready
+        injectScript("ai_bridge.js");
+    })
+    .catch(e => console.error("NeuroNav Camera Error:", e));
 
 // 6. Inject Bridge
 function injectScript(file_path) {
