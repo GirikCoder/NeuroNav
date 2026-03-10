@@ -73,7 +73,7 @@ NeuroNav maps ergonomic hand signs to specific browser events.
 | **Close Tab** | **Index + Middle (V)** | ✌️ Peace Sign |
 | **Restore Tab** | **Index + Pinky** | 🤘 Rock & Roll / Horns |
 | **New Tab** | **Index + Middle + Ring** | 🖖 Scout Salute |
-| **Reload** | **Pinky Extended** | 🤙 "Call Me" / Shaka |
+| **Reload** | **Pinky Extended** |  "Call Me" / Shaka |
 | **Minimize** | **Open Palm** | 🖐️ "Stop" Sign |
 
 > **Optimization Tip:** For best results, ensure your hand is roughly 1-2 feet from the webcam with a contrasting background.
