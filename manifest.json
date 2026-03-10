@@ -3,6 +3,19 @@
   "name": "NeuroNav",
   "version": "1.0",
   "description": "Control your browser with hand gestures.",
+  "icons": {
+    "24": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_icon": {
+      "24": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    },
+    "default_title": "NeuroNav"
+  },
   "permissions": [
     "activeTab",
     "scripting",
