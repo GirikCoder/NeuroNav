@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "NeuroNav",
   "version": "1.0",
+  "author": "Raghav Mittal & Girik Aggarwal",
   "description": "Control your browser with hand gestures.",
   "icons": {
     "24": "icon.png",
